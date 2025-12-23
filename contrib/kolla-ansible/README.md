@@ -42,9 +42,9 @@ kolla-ansible -i inventory reconfigure -t ovn
 Download and extract the exporter binary:
 
 ```bash
-wget https://github.com/lucadelmonte/ovn_exporter/releases/download/v2.3.0/ovn-exporter_2.3.0_linux_amd64.tar.gz
-tar -xzf ovn-exporter_2.3.0_linux_amd64.tar.gz
-cd ovn-exporter_2.3.0_linux_amd64
+wget https://github.com/lucadelmonte/ovn_exporter/releases/download/v2.3.1/ovn-exporter_2.3.1_linux_amd64.tar.gz
+tar -xzf ovn-exporter_2.3.1_linux_amd64.tar.gz
+cd ovn-exporter_2.3.1_linux_amd64
 ```
 
 Run the installation script to install the binary and default systemd service:
@@ -59,17 +59,17 @@ Download and install the environment file with Kolla-specific paths:
 
 ```bash
 # For RHEL/CentOS
-sudo wget -O /etc/sysconfig/ovn-exporter https://raw.githubusercontent.com/lucadelmonte/ovn_exporter/v2.3.0/contrib/kolla-ansible/ovn-exporter.env
+sudo wget -O /etc/sysconfig/ovn-exporter https://raw.githubusercontent.com/lucadelmonte/ovn_exporter/v2.3.1/contrib/kolla-ansible/ovn-exporter.env
 
 # For Debian/Ubuntu
-sudo wget -O /etc/default/ovn-exporter https://raw.githubusercontent.com/lucadelmonte/ovn_exporter/v2.3.0/contrib/kolla-ansible/ovn-exporter.env
+sudo wget -O /etc/default/ovn-exporter https://raw.githubusercontent.com/lucadelmonte/ovn_exporter/v2.3.1/contrib/kolla-ansible/ovn-exporter.env
 ```
 
 Download and install systemd drop-in override for Kolla container dependencies:
 
 ```bash
 sudo mkdir -p /etc/systemd/system/ovn-exporter.service.d/
-sudo wget -O /etc/systemd/system/ovn-exporter.service.d/ovn-exporter-kolla.conf https://raw.githubusercontent.com/lucadelmonte/ovn_exporter/v2.3.0/contrib/kolla-ansible/ovn-exporter-kolla.conf
+sudo wget -O /etc/systemd/system/ovn-exporter.service.d/ovn-exporter-kolla.conf https://raw.githubusercontent.com/lucadelmonte/ovn_exporter/v2.3.1/contrib/kolla-ansible/ovn-exporter-kolla.conf
 ```
 
 ### 4. Start the Service
