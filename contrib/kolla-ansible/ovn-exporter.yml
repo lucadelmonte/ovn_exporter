@@ -1,0 +1,17 @@
+---
+# OVN Database Socket and PID File Host Mounts
+# This exposes /run/ovn/ to the host filesystem for external tools
+# like ovn-exporter to access the database sockets
+#
+# Copy this file to your kolla-ansible configuration:
+#   cp ovn.yml /etc/kolla/globals.d/ovn.yml
+# Or merge with existing group_vars/all.yml
+
+ovn_nb_db_extra_volumes:
+  - "/run/ovn:/run/ovn:rw"
+
+ovn_sb_db_extra_volumes:
+  - "/run/ovn:/run/ovn:rw"
+
+ovn_northd_extra_volumes:
+  - "/run/ovn:/run/ovn:rw"
