@@ -49,17 +49,6 @@ tar -xzf ovn-exporter_${VERSION}_linux_amd64.tar.gz -C ovn-exporter
 cd ovn-exporter
 ```
 
-Run the installation script to install the binary and default systemd service:
-
-```bash
-wget https://raw.githubusercontent.com/lucadelmonte/ovn_exporter/v$VERSION/install.sh
-chmod +x install.sh
-mkdir -p assets/systemd/
-wget -O assets/systemd/add_service.sh https://raw.githubusercontent.com/lucadelmonte/ovn_exporter/v$VERSION/assets/systemd/add_service.sh
-chmod +x assets/systemd/add_service.sh
-sudo ./install.sh
-```
-
 ### 3. Configure for Kolla-Ansible
 
 Download and install the environment file with Kolla-specific paths:
@@ -81,11 +70,12 @@ sudo wget -O /etc/systemd/system/ovn-exporter.service.d/ovn-exporter-kolla.conf 
 
 ### 4. Start the Service
 
+Run the installation script to install the binary and default systemd service:
+
 ```bash
-sudo systemctl daemon-reload
-sudo systemctl enable ovn-exporter
-sudo systemctl start ovn-exporter
+sudo ./install.sh
 ```
+
 
 ### 5. Verify
 
