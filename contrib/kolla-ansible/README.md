@@ -2,6 +2,19 @@
 
 This directory contains configuration files to run ovn-exporter with OpenStack deployments managed by Kolla-Ansible.
 
+## Two ways to deploy
+
+- **Automated (recommended):** the [`ovs-ovn-exporter` Ansible role](roles/ovs-ovn-exporter/)
+  installs and configures **both** ovn-exporter and its companion
+  [ovs-exporter](https://github.com/lucadelmonte/ovs_exporter) across your fleet
+  (systemd unit, environment file, Kolla container dependencies, versioned
+  binary download). Start here if you use Ansible. An example playbook lives at
+  [`ovs-ovn-exporter.yml`](ovs-ovn-exporter.yml).
+- **Manual:** the step-by-step instructions below, using the standalone
+  `ovn-exporter.env` / `ovn-exporter-kolla.conf` / `ovn-exporter.yml` files in
+  this directory. Use this if you are not running Ansible or just want to
+  understand what the role does.
+
 ## Problem
 
 Kolla-Ansible deploys OVN components (NB database, SB database, northd) in Docker containers. The default ovn-exporter configuration expects these components to be running on the host with standard paths. This guide explains how to configure both Kolla and ovn-exporter to work together.
