@@ -153,24 +153,20 @@ The exporter can be configured via command-line flags. Run `ovn-exporter --help`
 ### Common Flags
 
 | Flag | Default | Description |
-|------|---------|-------------|
-| `--web.listen-address` | `:9476` | Address to listen on for web interface and telemetry |
+| ---- | ------- | ----------- |
+| `--web.listen-address` | `:9476` | Addresses on which to expose metrics and web interface. Repeatable for multiple addresses. Examples: `:9100` or `[::1]:9100` for http, `vsock://:9100` for vsock |
 | `--web.telemetry-path` | `/metrics` | Path under which to expose metrics |
+| `--web.config.file` | "" | Path to configuration file that can enable TLS or authentication. See [prometheus documentation](https://github.com/prometheus/exporter-toolkit/blob/master/docs/web-configuration.md) |
 | `--ovn.timeout` | `2` | Timeout on gRPC requests to OVN (seconds) |
 | `--ovn.poll-interval` | `15` | Minimum interval between collections from OVN server (seconds) |
 | `--log.level` | `info` | Logging severity level (debug, info, warn, error) |
+| `--log.format` | `logfmt` | Output format of log messages. One of: [logfmt, json] |
 | `--version` | `false` | Show version information and exit |
-
-### System Configuration
-
-| Flag | Default | Description |
-|------|---------|-------------|
-| `--system.run.dir` | `/var/run/openvswitch` | OVS default run directory |
 
 ### OVS Database Configuration
 
 | Flag | Default | Description |
-|------|---------|-------------|
+| ---- | ------- | ----------- |
 | `--database.vswitch.name` | `Open_vSwitch` | Name of OVS database |
 | `--database.vswitch.socket.remote` | `unix:/var/run/openvswitch/db.sock` | JSON-RPC unix socket to OVS db |
 | `--database.vswitch.file.data.path` | `/etc/openvswitch/conf.db` | OVS database file |
@@ -181,7 +177,7 @@ The exporter can be configured via command-line flags. Run `ovn-exporter --help`
 ### OVN Northbound Database Configuration
 
 | Flag | Default | Description |
-|------|---------|-------------|
+| ---- | ------- | ----------- |
 | `--database.northbound.name` | `OVN_Northbound` | Name of OVN Northbound database |
 | `--database.northbound.socket.remote` | `unix:/run/openvswitch/ovnnb_db.sock` | JSON-RPC unix socket to OVN NB db |
 | `--database.northbound.socket.control` | `unix:/run/openvswitch/ovnnb_db.ctl` | JSON-RPC unix socket to OVN NB app |
@@ -195,7 +191,7 @@ The exporter can be configured via command-line flags. Run `ovn-exporter --help`
 ### OVN Southbound Database Configuration
 
 | Flag | Default | Description |
-|------|---------|-------------|
+| ---- | ------- | ----------- |
 | `--database.southbound.name` | `OVN_Southbound` | Name of OVN Southbound database |
 | `--database.southbound.socket.remote` | `unix:/run/openvswitch/ovnsb_db.sock` | JSON-RPC unix socket to OVN SB db |
 | `--database.southbound.socket.control` | `unix:/run/openvswitch/ovnsb_db.ctl` | JSON-RPC unix socket to OVN SB app |
@@ -209,11 +205,10 @@ The exporter can be configured via command-line flags. Run `ovn-exporter --help`
 ### Service Configuration
 
 | Flag | Default | Description |
-|------|---------|-------------|
-| `--service.vswitchd.file.log.path` | `/var/log/openvswitch/ovs-vswitchd.log` | OVS vswitchd daemon log file |
-| `--service.vswitchd.file.pid.path` | `/var/run/openvswitch/ovs-vswitchd.pid` | OVS vswitchd daemon process ID file |
+| ---- | ------- | ----------- |
 | `--service.ovn.northd.file.log.path` | `/var/log/openvswitch/ovn-northd.log` | OVN northd daemon log file |
 | `--service.ovn.northd.file.pid.path` | `/run/openvswitch/ovn-northd.pid` | OVN northd daemon process ID file |
+| `--service.ovn.northd.socket.control` | `unix:/run/openvswitch/ovn-northd.ctl` | JSON-RPC unix socket to OVN northd app |
 
 ### Example Configuration
 

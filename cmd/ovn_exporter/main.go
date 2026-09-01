@@ -1,200 +1,144 @@
 package main
 
 import (
-	"flag"
-	"fmt"
 	"net/http"
 	"os"
-	"time"
 
-	"github.com/go-kit/log/level"
 	ovn "github.com/Liquescent-Development/ovn_exporter/pkg/ovn_exporter"
+	kingpin "github.com/alecthomas/kingpin/v2"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/prometheus/common/promslog"
+	"github.com/prometheus/common/promslog/flag"
+	prometheus_version "github.com/prometheus/common/version"
+	"github.com/prometheus/exporter-toolkit/web"
+	webflag "github.com/prometheus/exporter-toolkit/web/kingpinflag"
 )
 
+var version string
+
 func main() {
-	var listenAddress string
-	var metricsPath string
-	var pollTimeout int
-	var pollInterval int
-	var isShowVersion bool
-	var logLevel string
-	var databaseNorthboundName string
-	var databaseNorthboundSocketRemote string
-	var databaseNorthboundSocketControl string
-	var databaseNorthboundFileDataPath string
-	var databaseNorthboundFileLogPath string
-	var databaseNorthboundFilePidPath string
-	var databaseNorthboundPortDefault int
-	var databaseNorthboundPortSsl int
-	var databaseNorthboundPortRaft int
-	var databaseSouthboundName string
-	var databaseSouthboundSocketRemote string
-	var databaseSouthboundSocketControl string
-	var databaseSouthboundFileDataPath string
-	var databaseSouthboundFileLogPath string
-	var databaseSouthboundFilePidPath string
-	var databaseSouthboundPortDefault int
-	var databaseSouthboundPortSsl int
-	var databaseSouthboundPortRaft int
-	var serviceNorthdFileLogPath string
-	var serviceNorthdFilePidPath string
-	var serviceNorthdSocketControl string
 
-	flag.StringVar(&listenAddress, "web.listen-address", ":9476", "Address to listen on for web interface and telemetry.")
-	flag.StringVar(&metricsPath, "web.telemetry-path", "/metrics", "Path under which to expose metrics.")
-	flag.IntVar(&pollTimeout, "ovn.timeout", 2, "Timeout on gRPC requests to OVN.")
-	flag.IntVar(&pollInterval, "ovn.poll-interval", 15, "The minimum interval (in seconds) between collections from OVN server.")
-	flag.BoolVar(&isShowVersion, "version", false, "version information")
-	flag.StringVar(&logLevel, "log.level", "info", "logging severity level")
+	prometheus_version.Version = version
 
-	flag.StringVar(&databaseNorthboundName, "database.northbound.name", "OVN_Northbound", "The name of OVN NB (northbound) db.")
-	flag.StringVar(&databaseNorthboundSocketRemote, "database.northbound.socket.remote", "unix:/run/openvswitch/ovnnb_db.sock", "JSON-RPC unix socket to OVN NB db.")
-	flag.StringVar(&databaseNorthboundSocketControl, "database.northbound.socket.control", "unix:/run/openvswitch/ovnnb_db.ctl", "JSON-RPC unix socket to OVN NB app.")
-	flag.StringVar(&databaseNorthboundFileDataPath, "database.northbound.file.data.path", "/var/lib/openvswitch/ovnnb_db.db", "OVN NB db file.")
-	flag.StringVar(&databaseNorthboundFileLogPath, "database.northbound.file.log.path", "/var/log/openvswitch/ovsdb-server-nb.log", "OVN NB db log file.")
-	flag.StringVar(&databaseNorthboundFilePidPath, "database.northbound.file.pid.path", "/run/openvswitch/ovnnb_db.pid", "OVN NB db process id file.")
-	flag.IntVar(&databaseNorthboundPortDefault, "database.northbound.port.default", 6641, "OVN NB db network socket port.")
-	flag.IntVar(&databaseNorthboundPortSsl, "database.northbound.port.ssl", 6631, "OVN NB db network socket secure port.")
-	flag.IntVar(&databaseNorthboundPortRaft, "database.northbound.port.raft", 6643, "OVN NB db network port for clustering (raft)")
+	var (
+		pollTimeout                     = kingpin.Flag("ovn.timeout", "Timeout on gRPC requests to OVN.").Default("2").Int()
+		pollInterval                    = kingpin.Flag("ovn.poll-interval", "The minimum interval (in seconds) between collections from OVN server.").Default("15").Int()
+		databaseNorthboundName          = kingpin.Flag("database.northbound.name", "The name of OVN NB (northbound) db.").Default("OVN_Northbound").String()
+		databaseNorthboundSocketRemote  = kingpin.Flag("database.northbound.socket.remote", "JSON-RPC unix socket to OVN NB db.").Default("unix:/run/openvswitch/ovnnb_db.sock").String()
+		databaseNorthboundSocketControl = kingpin.Flag("database.northbound.socket.control", "JSON-RPC unix socket to OVN NB app.").Default("unix:/run/openvswitch/ovnnb_db.ctl").String()
+		databaseNorthboundFileDataPath  = kingpin.Flag("database.northbound.file.data.path", "OVN NB db file.").Default("/var/lib/openvswitch/ovnnb_db.db").String()
+		databaseNorthboundFileLogPath   = kingpin.Flag("database.northbound.file.log.path", "OVN NB db log file.").Default("/var/log/openvswitch/ovsdb-server-nb.log").String()
+		databaseNorthboundFilePidPath   = kingpin.Flag("database.northbound.file.pid.path", "OVN NB db process id file.").Default("/run/openvswitch/ovnnb_db.pid").String()
+		databaseNorthboundPortDefault   = kingpin.Flag("database.northbound.port.default", "OVN NB db network socket port.").Default("6641").Int()
+		databaseNorthboundPortSsl       = kingpin.Flag("database.northbound.port.ssl", "OVN NB db network socket secure port.").Default("6631").Int()
+		databaseNorthboundPortRaft      = kingpin.Flag("database.northbound.port.raft", "OVN NB db network port for clustering (raft)").Default("6643").Int()
 
-	flag.StringVar(&databaseSouthboundName, "database.southbound.name", "OVN_Southbound", "The name of OVN SB (southbound) db.")
-	flag.StringVar(&databaseSouthboundSocketRemote, "database.southbound.socket.remote", "unix:/run/openvswitch/ovnsb_db.sock", "JSON-RPC unix socket to OVN SB db.")
-	flag.StringVar(&databaseSouthboundSocketControl, "database.southbound.socket.control", "unix:/run/openvswitch/ovnsb_db.ctl", "JSON-RPC unix socket to OVN SB app.")
-	flag.StringVar(&databaseSouthboundFileDataPath, "database.southbound.file.data.path", "/var/lib/openvswitch/ovnsb_db.db", "OVN SB db file.")
-	flag.StringVar(&databaseSouthboundFileLogPath, "database.southbound.file.log.path", "/var/log/openvswitch/ovsdb-server-sb.log", "OVN SB db log file.")
-	flag.StringVar(&databaseSouthboundFilePidPath, "database.southbound.file.pid.path", "/run/openvswitch/ovnsb_db.pid", "OVN SB db process id file.")
-	flag.IntVar(&databaseSouthboundPortDefault, "database.southbound.port.default", 6642, "OVN SB db network socket port.")
-	flag.IntVar(&databaseSouthboundPortSsl, "database.southbound.port.ssl", 6632, "OVN SB db network socket secure port.")
-	flag.IntVar(&databaseSouthboundPortRaft, "database.southbound.port.raft", 6644, "OVN SB db network port for clustering (raft)")
+		databaseSouthboundName          = kingpin.Flag("database.southbound.name", "The name of OVN SB (southbound) db.").Default("OVN_Southbound").String()
+		databaseSouthboundSocketRemote  = kingpin.Flag("database.southbound.socket.remote", "JSON-RPC unix socket to OVN SB db.").Default("unix:/run/openvswitch/ovnsb_db.sock").String()
+		databaseSouthboundSocketControl = kingpin.Flag("database.southbound.socket.control", "JSON-RPC unix socket to OVN SB app.").Default("unix:/run/openvswitch/ovnsb_db.ctl").String()
+		databaseSouthboundFileDataPath  = kingpin.Flag("database.southbound.file.data.path", "OVN SB db file.").Default("/var/lib/openvswitch/ovnsb_db.db").String()
+		databaseSouthboundFileLogPath   = kingpin.Flag("database.southbound.file.log.path", "OVN SB db log file.").Default("/var/log/openvswitch/ovsdb-server-sb.log").String()
+		databaseSouthboundFilePidPath   = kingpin.Flag("database.southbound.file.pid.path", "OVN SB db process id file.").Default("/run/openvswitch/ovnsb_db.pid").String()
+		databaseSouthboundPortDefault   = kingpin.Flag("database.southbound.port.default", "OVN SB db network socket port.").Default("6642").Int()
+		databaseSouthboundPortSsl       = kingpin.Flag("database.southbound.port.ssl", "OVN SB db network socket secure port.").Default("6632").Int()
+		databaseSouthboundPortRaft      = kingpin.Flag("database.southbound.port.raft", "OVN SB db network port for clustering (raft)").Default("6644").Int()
 
-	flag.StringVar(&serviceNorthdFileLogPath, "service.ovn.northd.file.log.path", "/var/log/openvswitch/ovn-northd.log", "OVN northd daemon log file.")
-	flag.StringVar(&serviceNorthdFilePidPath, "service.ovn.northd.file.pid.path", "/run/openvswitch/ovn-northd.pid", "OVN northd daemon process id file.")
-	flag.StringVar(&serviceNorthdSocketControl, "service.ovn.northd.socket.control", "unix:/run/openvswitch/ovn-northd.ctl", "JSON-RPC unix socket to OVN northd app.")
-
-	var usageHelp = func() {
-		fmt.Fprintf(os.Stderr, "\n%s - Prometheus Exporter for Open Virtual Network (OVN)\n\n", ovn.GetExporterName())
-		fmt.Fprintf(os.Stderr, "Usage: %s [arguments]\n\n", ovn.GetExporterName())
-		flag.PrintDefaults()
-		fmt.Fprintf(os.Stderr, "\nDocumentation: https://github.com/Liquescent-Development/ovn_exporter/\n\n")
-	}
-	flag.Usage = usageHelp
-	flag.Parse()
-
-	if isShowVersion {
-		fmt.Fprintf(os.Stdout, "%s %s", ovn.GetExporterName(), ovn.GetVersion())
-		if ovn.GetRevision() != "" {
-			fmt.Fprintf(os.Stdout, ", commit: %s\n", ovn.GetRevision())
-		} else {
-			fmt.Fprint(os.Stdout, "\n")
-		}
-		os.Exit(0)
-	}
-
-	logger, err := ovn.NewLogger(logLevel)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "failed initializing logger: %v", err)
-		os.Exit(1)
-	}
-
-	level.Info(logger).Log(
-		"msg", "Starting exporter",
-		"exporter", ovn.GetExporterName(),
-		"version", ovn.GetVersionInfo(),
-		"build_context", ovn.GetVersionBuildContext(),
+		serviceNorthdFileLogPath   = kingpin.Flag("service.ovn.northd.file.log.path", "OVN northd daemon log file.").Default("/var/log/openvswitch/ovn-northd.log").String()
+		serviceNorthdFilePidPath   = kingpin.Flag("service.ovn.northd.file.pid.path", "OVN northd daemon process id file.").Default("/run/openvswitch/ovn-northd.pid").String()
+		serviceNorthdSocketControl = kingpin.Flag("service.ovn.northd.socket.control", "JSON-RPC unix socket to OVN northd app.").Default("unix:/run/openvswitch/ovn-northd.ctl").String()
 	)
 
+	metricsPath := kingpin.Flag(
+		"web.telemetry-path", "Path under which to expose metrics",
+	).Default("/metrics").String()
+
+	toolkitFlags := webflag.AddFlags(kingpin.CommandLine, ":9476")
+
+	promlogConfig := &promslog.Config{}
+	flag.AddFlags(kingpin.CommandLine, promlogConfig)
+	kingpin.Version(prometheus_version.Print("ovn_exporter"))
+	kingpin.HelpFlag.Short('h')
+	kingpin.Parse()
+	logger := promslog.New(promlogConfig)
+
 	opts := ovn.Options{
-		Timeout: pollTimeout,
+		Timeout: *pollTimeout,
 		Logger:  logger,
 	}
 
 	exporter, err := ovn.NewExporter(opts)
 	if err != nil {
-		level.Error(logger).Log(
+		logger.Error(
 			"msg", "failed to init properly",
 			"error", err.Error(),
 		)
 		os.Exit(1)
 	}
 
-	exporter.Client.Database.Northbound.Name = databaseNorthboundName
-	exporter.Client.Database.Northbound.Socket.Remote = databaseNorthboundSocketRemote
-	exporter.Client.Database.Northbound.Socket.Control = databaseNorthboundSocketControl
-	exporter.Client.Database.Northbound.File.Data.Path = databaseNorthboundFileDataPath
-	exporter.Client.Database.Northbound.File.Log.Path = databaseNorthboundFileLogPath
-	exporter.Client.Database.Northbound.File.Pid.Path = databaseNorthboundFilePidPath
-	exporter.Client.Database.Northbound.Port.Default = databaseNorthboundPortDefault
-	exporter.Client.Database.Northbound.Port.Ssl = databaseNorthboundPortSsl
-	exporter.Client.Database.Northbound.Port.Raft = databaseNorthboundPortRaft
+	exporter.Client.Database.Northbound.Name = *databaseNorthboundName
+	exporter.Client.Database.Northbound.Socket.Remote = *databaseNorthboundSocketRemote
+	exporter.Client.Database.Northbound.Socket.Control = *databaseNorthboundSocketControl
+	exporter.Client.Database.Northbound.File.Data.Path = *databaseNorthboundFileDataPath
+	exporter.Client.Database.Northbound.File.Log.Path = *databaseNorthboundFileLogPath
+	exporter.Client.Database.Northbound.File.Pid.Path = *databaseNorthboundFilePidPath
+	exporter.Client.Database.Northbound.Port.Default = *databaseNorthboundPortDefault
+	exporter.Client.Database.Northbound.Port.Ssl = *databaseNorthboundPortSsl
+	exporter.Client.Database.Northbound.Port.Raft = *databaseNorthboundPortRaft
 
-	exporter.Client.Database.Southbound.Name = databaseSouthboundName
-	exporter.Client.Database.Southbound.Socket.Remote = databaseSouthboundSocketRemote
-	exporter.Client.Database.Southbound.Socket.Control = databaseSouthboundSocketControl
-	exporter.Client.Database.Southbound.File.Data.Path = databaseSouthboundFileDataPath
-	exporter.Client.Database.Southbound.File.Log.Path = databaseSouthboundFileLogPath
-	exporter.Client.Database.Southbound.File.Pid.Path = databaseSouthboundFilePidPath
-	exporter.Client.Database.Southbound.Port.Default = databaseSouthboundPortDefault
-	exporter.Client.Database.Southbound.Port.Ssl = databaseSouthboundPortSsl
-	exporter.Client.Database.Southbound.Port.Raft = databaseSouthboundPortRaft
+	exporter.Client.Database.Southbound.Name = *databaseSouthboundName
+	exporter.Client.Database.Southbound.Socket.Remote = *databaseSouthboundSocketRemote
+	exporter.Client.Database.Southbound.Socket.Control = *databaseSouthboundSocketControl
+	exporter.Client.Database.Southbound.File.Data.Path = *databaseSouthboundFileDataPath
+	exporter.Client.Database.Southbound.File.Log.Path = *databaseSouthboundFileLogPath
+	exporter.Client.Database.Southbound.File.Pid.Path = *databaseSouthboundFilePidPath
+	exporter.Client.Database.Southbound.Port.Default = *databaseSouthboundPortDefault
+	exporter.Client.Database.Southbound.Port.Ssl = *databaseSouthboundPortSsl
+	exporter.Client.Database.Southbound.Port.Raft = *databaseSouthboundPortRaft
 
-	exporter.Client.Service.Northd.File.Log.Path = serviceNorthdFileLogPath
-	exporter.Client.Service.Northd.File.Pid.Path = serviceNorthdFilePidPath
-	exporter.Client.Service.Northd.Socket.Control = serviceNorthdSocketControl
+	exporter.Client.Service.Northd.File.Log.Path = *serviceNorthdFileLogPath
+	exporter.Client.Service.Northd.File.Pid.Path = *serviceNorthdFilePidPath
+	exporter.Client.Service.Northd.Socket.Control = *serviceNorthdSocketControl
 
 	exporter, err = ovn.ExporterPerformClientCalls(exporter)
 	if err != nil {
-		level.Error(logger).Log(
+		logger.Error(
 			"msg", "failed to finalize exporter calls properly",
 			"exporter_name", ovn.GetExporterName(),
 			"error", err.Error(),
 		)
 	}
 
-	level.Info(logger).Log("ovs_system_id", exporter.Client.System.ID)
+	logger.Info("ovs_system_id", exporter.Client.System.ID)
 
-	exporter.SetPollInterval(int64(pollInterval))
+	exporter.SetPollInterval(int64(*pollInterval))
 	prometheus.MustRegister(exporter)
 
-	// Create a new ServeMux instead of using DefaultServeMux for better security
-	mux := http.NewServeMux()
-	mux.Handle(metricsPath, promhttp.Handler())
-	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		// Add security headers
-		w.Header().Set("X-Content-Type-Options", "nosniff")
-		w.Header().Set("X-Frame-Options", "DENY")
-		w.Header().Set("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'")
-
-		if r.URL.Path != "/" {
-			http.NotFound(w, r)
-			return
+	http.Handle(*metricsPath, promhttp.Handler())
+	if *metricsPath != "/" {
+		landingCnf := web.LandingConfig{
+			Name:        "OVN Exporter",
+			Description: "Prometheus OVN Exporter",
+			Version:     prometheus_version.Info(),
+			Links: []web.LandingLinks{
+				{
+					Address: *metricsPath,
+					Text:    "Metrics",
+				},
+			},
 		}
 
-		w.Write([]byte(`<html>
-             <head><title>OVN Exporter</title></head>
-             <body>
-             <h1>OVN Exporter</h1>
-             <p><a href='` + metricsPath + `'>Metrics</a></p>
-             </body>
-             </html>`))
-	})
-
-	// Create server with security configurations
-	server := &http.Server{
-		Addr:         listenAddress,
-		Handler:      mux,
-		ReadTimeout:  30 * time.Second,
-		WriteTimeout: 30 * time.Second,
-		IdleTimeout:  60 * time.Second,
+		landingPage, err := web.NewLandingPage(landingCnf)
+		if err != nil {
+			logger.Error("Failed to generate landing page", "msg", err)
+			os.Exit(1)
+		}
+		http.Handle("/", landingPage)
 	}
 
-	level.Info(logger).Log("listen_on", listenAddress)
-	if err := server.ListenAndServe(); err != nil {
-		level.Error(logger).Log(
-			"msg", "listener failed",
-			"error", err.Error(),
-		)
+	srv := &http.Server{}
+	if err = web.ListenAndServe(srv, toolkitFlags, logger); err != nil {
+		logger.Error("Failed to start server", "msg", err)
 		os.Exit(1)
 	}
 }
