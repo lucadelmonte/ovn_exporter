@@ -16,13 +16,11 @@ package ovn_exporter
 
 import (
 	"fmt"
-	"os"
+	"log/slog"
 	"sync"
 	"sync/atomic"
 	"time"
 
-	"github.com/go-kit/log"
-	"github.com/go-kit/log/level"
 	"github.com/greenpau/ovsdb"
 	"github.com/greenpau/versioned"
 	"github.com/prometheus/client_golang/prometheus"
@@ -342,36 +340,12 @@ type Exporter struct {
 	requestsLocker       sync.RWMutex
 	nextCollectionTicker int64
 	metrics              []prometheus.Metric
-	logger               log.Logger
+	logger               *slog.Logger
 }
 
 type Options struct {
 	Timeout int
-	Logger  log.Logger
-}
-
-// NewLogger returns an instance of logger.
-func NewLogger(logLevel string) (log.Logger, error) {
-	logger := log.NewLogfmtLogger(os.Stderr)
-	logger = log.With(logger, "ts", log.DefaultTimestampUTC)
-	logger = log.With(logger, "caller", log.DefaultCaller)
-
-	var levelFilter level.Option
-	switch logLevel {
-	case "debug":
-		levelFilter = level.AllowDebug()
-	case "info":
-		levelFilter = level.AllowInfo()
-	case "warn":
-		levelFilter = level.AllowWarn()
-	case "error":
-		levelFilter = level.AllowError()
-	default:
-		return nil, fmt.Errorf("invalid log level: %s", logLevel)
-	}
-
-	logger = level.NewFilter(logger, levelFilter)
-	return logger, nil
+	Logger  *slog.Logger
 }
 
 // NewExporter returns an initialized Exporter.
@@ -394,21 +368,21 @@ func NewExporter(opts Options) (*Exporter, error) {
 
 // ExporterPerformClientCalls creates client connection.
 func ExporterPerformClientCalls(e *Exporter) (*Exporter, error) {
-	level.Debug(e.logger).Log(
+	e.logger.Debug(
 		"msg", "NewExporter() calls Connect()",
 		"system_id", e.Client.System.ID,
 	)
 	if err := e.Client.Connect(); err != nil {
 		return e, err
 	}
-	level.Debug(e.logger).Log(
+	e.logger.Debug(
 		"msg", "NewExporter() calls GetSystemInfo()",
 		"system_id", e.Client.System.ID,
 	)
 	if err := e.Client.GetSystemInfo(); err != nil {
 		return e, err
 	}
-	level.Debug(e.logger).Log(
+	e.logger.Debug(
 		"msg", "NewExporter() initialized successfully",
 		"system_id", e.Client.System.ID,
 	)
@@ -500,14 +474,14 @@ func (e *Exporter) IncrementSuccessCounter() {
 // Collect implements prometheus.Collector.
 func (e *Exporter) Collect(ch chan<- prometheus.Metric) {
 	e.GatherMetrics()
-	level.Debug(e.logger).Log(
+	e.logger.Debug(
 		"msg", "Collect() calls RLock()",
 		"system_id", e.Client.System.ID,
 	)
 	e.RLock()
 	defer e.RUnlock()
 	if len(e.metrics) == 0 {
-		level.Debug(e.logger).Log(
+		e.logger.Debug(
 			"msg", "Collect() no metrics found",
 			"system_id", e.Client.System.ID,
 		)
@@ -550,7 +524,7 @@ func (e *Exporter) Collect(ch chan<- prometheus.Metric) {
 		)
 		return
 	}
-	level.Debug(e.logger).Log(
+	e.logger.Debug(
 		"msg", "Collect() sends metrics to a shared channel",
 		"system_id", e.Client.System.ID,
 		"metric_count", len(e.metrics),
@@ -563,7 +537,7 @@ func (e *Exporter) Collect(ch chan<- prometheus.Metric) {
 // GatherMetrics collect data from OVN server and stores them
 // as Prometheus metrics.
 func (e *Exporter) GatherMetrics() {
-	level.Debug(e.logger).Log(
+	e.logger.Debug(
 		"msg", "GatherMetrics() called",
 		"system_id", e.Client.System.ID,
 	)
@@ -571,14 +545,14 @@ func (e *Exporter) GatherMetrics() {
 		return
 	}
 	e.Lock()
-	level.Debug(e.logger).Log(
+	e.logger.Debug(
 		"msg", "GatherMetrics() locked",
 		"system_id", e.Client.System.ID,
 	)
 	defer e.Unlock()
 	if len(e.metrics) > 0 {
 		e.metrics = e.metrics[:0]
-		level.Debug(e.logger).Log(
+		e.logger.Debug(
 			"msg", "GatherMetrics() cleared metrics",
 			"system_id", e.Client.System.ID,
 		)
@@ -590,7 +564,7 @@ func (e *Exporter) GatherMetrics() {
 
 	err = e.Client.GetSystemInfo()
 	if err != nil {
-		level.Error(e.logger).Log(
+		e.logger.Error(
 			"msg", "GetSystemInfo() failed",
 			"system_id", e.Client.System.ID,
 			"error", err.Error(),
@@ -599,7 +573,7 @@ func (e *Exporter) GatherMetrics() {
 		upValue = 0
 	} else {
 		e.IncrementSuccessCounter()
-		level.Debug(e.logger).Log(
+		e.logger.Debug(
 			"msg", "GetSystemInfo() successful",
 			"system_id", e.Client.System.ID,
 		)
@@ -611,13 +585,13 @@ func (e *Exporter) GatherMetrics() {
 		"ovn-northd",
 	}
 	for _, component := range components {
-		level.Debug(e.logger).Log(
+		e.logger.Debug(
 			"msg", "GatherMetrics() calls GetProcessInfo()",
 			"component", component,
 			"system_id", e.Client.System.ID,
 		)
 		if _, err := e.Client.GetProcessInfo(component); err != nil {
-			level.Error(e.logger).Log(
+			e.logger.Error(
 				"msg", "GetProcessInfo() failed",
 				"component", component,
 				"system_id", e.Client.System.ID,
@@ -628,7 +602,7 @@ func (e *Exporter) GatherMetrics() {
 		} else {
 			e.IncrementSuccessCounter()
 		}
-		level.Debug(e.logger).Log(
+		e.logger.Debug(
 			"msg", "GatherMetrics() completed GetProcessInfo()",
 			"component", component,
 			"system_id", e.Client.System.ID,
@@ -641,14 +615,14 @@ func (e *Exporter) GatherMetrics() {
 		"ovn-northd",
 	}
 	for _, component := range components {
-		level.Debug(e.logger).Log(
+		e.logger.Debug(
 			"msg", "GatherMetrics() calls GetLogFileInfo()",
 			"component", component,
 			"system_id", e.Client.System.ID,
 		)
 		file, err := e.Client.GetLogFileInfo(component)
 		if err != nil {
-			level.Error(e.logger).Log(
+			e.logger.Error(
 				"msg", "GetLogFileInfo() failed",
 				"component", component,
 				"system_id", e.Client.System.ID,
@@ -659,7 +633,7 @@ func (e *Exporter) GatherMetrics() {
 		} else {
 			e.IncrementSuccessCounter()
 		}
-		level.Debug(e.logger).Log(
+		e.logger.Debug(
 			"msg", "GatherMetrics() completed GetLogFileInfo()",
 			"component", component,
 			"system_id", e.Client.System.ID,
@@ -672,14 +646,14 @@ func (e *Exporter) GatherMetrics() {
 			file.Component,
 			file.Path,
 		))
-		level.Debug(e.logger).Log(
+		e.logger.Debug(
 			"msg", "GatherMetrics() calls GetLogFileEventStats()",
 			"component", component,
 			"system_id", e.Client.System.ID,
 		)
 		eventStats, err := e.Client.GetLogFileEventStats(component)
 		if err != nil {
-			level.Error(e.logger).Log(
+			e.logger.Error(
 				"msg", "GetLogFileEventStats() failed",
 				"component", component,
 				"system_id", e.Client.System.ID,
@@ -690,7 +664,7 @@ func (e *Exporter) GatherMetrics() {
 		} else {
 			e.IncrementSuccessCounter()
 		}
-		level.Debug(e.logger).Log(
+		e.logger.Debug(
 			"msg", "GatherMetrics() completed GetLogFileEventStats()",
 			"component", component,
 			"system_id", e.Client.System.ID,
@@ -710,13 +684,13 @@ func (e *Exporter) GatherMetrics() {
 		}
 	}
 
-	level.Debug(e.logger).Log(
+	e.logger.Debug(
 		"msg", "GatherMetrics() calls GetChassis()",
 		"system_id", e.Client.System.ID,
 	)
 	chassisNameByUUID := map[string]string{}
 	if vteps, err := e.Client.GetChassis(); err != nil {
-		level.Error(e.logger).Log(
+		e.logger.Error(
 			"msg", "GetChassis() failed",
 			"southbound_db_name", e.Client.Database.Southbound.Name,
 			"system_id", e.Client.System.ID,
@@ -748,18 +722,18 @@ func (e *Exporter) GatherMetrics() {
 			))
 		}
 	}
-	level.Debug(e.logger).Log(
+	e.logger.Debug(
 		"msg", "GatherMetrics() completed GetChassis()",
 		"system_id", e.Client.System.ID,
 	)
 
-	level.Debug(e.logger).Log(
+	e.logger.Debug(
 		"msg", "GatherMetrics() calls GetLogicalSwitches()",
 		"system_id", e.Client.System.ID,
 	)
 	lsws, err := e.Client.GetLogicalSwitches()
 	if err != nil {
-		level.Error(e.logger).Log(
+		e.logger.Error(
 			"msg", "GetLogicalSwitches() failed",
 			"southbound_db_name", e.Client.Database.Southbound.Name,
 			"system_id", e.Client.System.ID,
@@ -819,18 +793,18 @@ func (e *Exporter) GatherMetrics() {
 			))
 		}
 	}
-	level.Debug(e.logger).Log(
+	e.logger.Debug(
 		"msg", "GatherMetrics() completed GetLogicalSwitches()",
 		"system_id", e.Client.System.ID,
 	)
 
-	level.Debug(e.logger).Log(
+	e.logger.Debug(
 		"msg", "GatherMetrics() calls GetLogicalSwitchPorts()",
 		"system_id", e.Client.System.ID,
 	)
 	lswps, err := e.Client.GetLogicalSwitchPorts()
 	if err != nil {
-		level.Error(e.logger).Log(
+		e.logger.Error(
 			"msg", "GetLogicalSwitchPorts() failed",
 			"southbound_db_name", e.Client.Database.Southbound.Name,
 			"system_id", e.Client.System.ID,
@@ -883,20 +857,20 @@ func (e *Exporter) GatherMetrics() {
 			))
 		}
 	}
-	level.Debug(e.logger).Log(
+	e.logger.Debug(
 		"msg", "GatherMetrics() completed GetLogicalSwitchPorts()",
 		"system_id", e.Client.System.ID,
 	)
 
 	// Gather Port_Binding metrics (chassis-level distribution of all binding
 	// types, plus drill-down info for chassis-pinned gateway ports).
-	level.Debug(e.logger).Log(
+	e.logger.Debug(
 		"msg", "GatherMetrics() calls GetPortBindings()",
 		"system_id", e.Client.System.ID,
 	)
 	pbs, err := e.Client.GetPortBindings()
 	if err != nil {
-		level.Error(e.logger).Log(
+		e.logger.Error(
 			"msg", "GetPortBindings() failed",
 			"southbound_db_name", e.Client.Database.Southbound.Name,
 			"system_id", e.Client.System.ID,
@@ -947,19 +921,19 @@ func (e *Exporter) GatherMetrics() {
 			))
 		}
 	}
-	level.Debug(e.logger).Log(
+	e.logger.Debug(
 		"msg", "GatherMetrics() completed GetPortBindings()",
 		"system_id", e.Client.System.ID,
 	)
 
 	// Gather Logical Router metrics
-	level.Debug(e.logger).Log(
+	e.logger.Debug(
 		"msg", "GatherMetrics() calls GetLogicalRouters()",
 		"system_id", e.Client.System.ID,
 	)
 	routers, err := e.GetLogicalRouters()
 	if err != nil {
-		level.Error(e.logger).Log(
+		e.logger.Error(
 			"msg", "GetLogicalRouters() failed",
 			"northbound_db_name", e.Client.Database.Northbound.Name,
 			"system_id", e.Client.System.ID,
@@ -1041,7 +1015,7 @@ func (e *Exporter) GatherMetrics() {
 			}
 		}
 	}
-	level.Debug(e.logger).Log(
+	e.logger.Debug(
 		"msg", "GatherMetrics() completed GetLogicalRouters()",
 		"system_id", e.Client.System.ID,
 	)
@@ -1055,39 +1029,39 @@ func (e *Exporter) GatherMetrics() {
 	}
 
 	for _, component := range components {
-		level.Debug(e.logger).Log(
+		e.logger.Debug(
 			"msg", "GatherMetrics() calls AppListCommands()",
 			"component", component,
 			"system_id", e.Client.System.ID,
 		)
 		if cmds, err := e.Client.AppListCommands(component); err != nil {
-			level.Error(e.logger).Log(
+			e.logger.Error(
 				"msg", "AppListCommands() failed",
 				"component", component,
 				"system_id", e.Client.System.ID,
 				"error", err.Error(),
 			)
 			e.IncrementErrorCounter()
-			level.Debug(e.logger).Log(
+			e.logger.Debug(
 				"msg", "GatherMetrics() completed AppListCommands()",
 				"component", component,
 				"system_id", e.Client.System.ID,
 			)
 		} else {
 			e.IncrementSuccessCounter()
-			level.Debug(e.logger).Log(
+			e.logger.Debug(
 				"msg", "GatherMetrics() completed AppListCommands()",
 				"component", component,
 				"system_id", e.Client.System.ID,
 			)
 			if cmds["coverage/show"] {
-				level.Debug(e.logger).Log(
+				e.logger.Debug(
 					"msg", "GatherMetrics() calls GetAppCoverageMetrics()",
 					"component", component,
 					"system_id", e.Client.System.ID,
 				)
 				if metrics, err := e.Client.GetAppCoverageMetrics(component); err != nil {
-					level.Error(e.logger).Log(
+					e.logger.Error(
 						"msg", "GetAppCoverageMetrics() failed",
 						"component", component,
 						"system_id", e.Client.System.ID,
@@ -1122,20 +1096,20 @@ func (e *Exporter) GatherMetrics() {
 						}
 					}
 				}
-				level.Debug(e.logger).Log(
+				e.logger.Debug(
 					"msg", "GatherMetrics() completed GetAppCoverageMetrics()",
 					"component", component,
 					"system_id", e.Client.System.ID,
 				)
 			}
 			if cmds["memory/show"] {
-				level.Debug(e.logger).Log(
+				e.logger.Debug(
 					"msg", "GatherMetrics() calls GetAppMemoryMetrics()",
 					"component", component,
 					"system_id", e.Client.System.ID,
 				)
 				if metrics, err := e.Client.GetAppMemoryMetrics(component); err != nil {
-					level.Error(e.logger).Log(
+					e.logger.Error(
 						"msg", "GetAppMemoryMetrics() failed",
 						"component", component,
 						"system_id", e.Client.System.ID,
@@ -1155,21 +1129,21 @@ func (e *Exporter) GatherMetrics() {
 						))
 					}
 				}
-				level.Debug(e.logger).Log(
+				e.logger.Debug(
 					"msg", "GatherMetrics() completed GetAppMemoryMetrics()",
 					"component", component,
 					"system_id", e.Client.System.ID,
 				)
 			}
 			if cmds["cluster/status DB"] {
-				level.Debug(e.logger).Log(
+				e.logger.Debug(
 					"msg", "GatherMetrics() calls GetAppClusteringInfo()",
 					"component", component,
 					"system_id", e.Client.System.ID,
 				)
 				if cluster, err := e.Client.GetAppClusteringInfo(component); err != nil {
 					isClusterEnabled = false
-					level.Error(e.logger).Log(
+					e.logger.Error(
 						"msg", "GetAppClusteringInfo() failed",
 						"component", component,
 						"system_id", e.Client.System.ID,
@@ -1373,7 +1347,7 @@ func (e *Exporter) GatherMetrics() {
 					}
 					//log.Infof("%s: %v", component, cluster)
 				}
-				level.Debug(e.logger).Log(
+				e.logger.Debug(
 					"msg", "GatherMetrics() completed GetAppClusteringInfo()",
 					"component", component,
 					"system_id", e.Client.System.ID,
@@ -1398,14 +1372,14 @@ func (e *Exporter) GatherMetrics() {
 	}
 
 	for _, component := range components {
-		level.Debug(e.logger).Log(
+		e.logger.Debug(
 			"msg", "GatherMetrics() calls IsDefaultPortUp()",
 			"component", component,
 			"system_id", e.Client.System.ID,
 		)
 		defaultPortUp, err := e.Client.IsDefaultPortUp(component)
 		if err != nil {
-			level.Error(e.logger).Log(
+			e.logger.Error(
 				"msg", "IsDefaultPortUp() failed",
 				"component", component,
 				"system_id", e.Client.System.ID,
@@ -1423,20 +1397,20 @@ func (e *Exporter) GatherMetrics() {
 			component,
 			"default",
 		))
-		level.Debug(e.logger).Log(
+		e.logger.Debug(
 			"msg", "GatherMetrics() completed IsDefaultPortUp()",
 			"component", component,
 			"system_id", e.Client.System.ID,
 		)
 
-		level.Debug(e.logger).Log(
+		e.logger.Debug(
 			"msg", "GatherMetrics() calls IsSslPortUp()",
 			"component", component,
 			"system_id", e.Client.System.ID,
 		)
 		sslPortUp, err := e.Client.IsSslPortUp(component)
 		if err != nil {
-			level.Error(e.logger).Log(
+			e.logger.Error(
 				"msg", "IsSslPortUp() failed",
 				"component", component,
 				"system_id", e.Client.System.ID,
@@ -1454,21 +1428,21 @@ func (e *Exporter) GatherMetrics() {
 			component,
 			"ssl",
 		))
-		level.Debug(e.logger).Log(
+		e.logger.Debug(
 			"msg", "GatherMetrics() completed IsSslPortUp()",
 			"component", component,
 			"system_id", e.Client.System.ID,
 		)
 
 		if isClusterEnabled {
-			level.Debug(e.logger).Log(
+			e.logger.Debug(
 				"msg", "GatherMetrics() calls IsRaftPortUp()",
 				"component", component,
 				"system_id", e.Client.System.ID,
 			)
 			raftPortUp, err := e.Client.IsRaftPortUp(component)
 			if err != nil {
-				level.Error(e.logger).Log(
+				e.logger.Error(
 					"msg", "IsRaftPortUp() failed",
 					"component", component,
 					"system_id", e.Client.System.ID,
@@ -1486,7 +1460,7 @@ func (e *Exporter) GatherMetrics() {
 				component,
 				"raft",
 			))
-			level.Debug(e.logger).Log(
+			e.logger.Debug(
 				"msg", "GatherMetrics() completed IsRaftPortUp()",
 				"component", component,
 				"system_id", e.Client.System.ID,
@@ -1539,7 +1513,7 @@ func (e *Exporter) GatherMetrics() {
 
 	e.nextCollectionTicker = time.Now().Add(time.Duration(e.pollInterval) * time.Second).Unix()
 
-	level.Debug(e.logger).Log(
+	e.logger.Debug(
 		"msg", "GatherMetrics() returns",
 		"system_id", e.Client.System.ID,
 	)
@@ -1547,14 +1521,14 @@ func (e *Exporter) GatherMetrics() {
 
 // OvnLogicalRouter holds basic information about a logical router
 type OvnLogicalRouter struct {
-	UUID               string            `json:"uuid" yaml:"uuid"`
-	Name               string            `json:"name" yaml:"name"`
-	ExternalIDs        map[string]string `json:"external_ids" yaml:"external_ids"`
-	Ports              []string          `json:"ports" yaml:"ports"`
-	StaticRoutes       []string          `json:"static_routes" yaml:"static_routes"`
-	NAT                []string          `json:"nat" yaml:"nat"`
-	LoadBalancer       []string          `json:"load_balancer" yaml:"load_balancer"`
-	Policies           []string          `json:"policies" yaml:"policies"`
+	UUID         string            `json:"uuid" yaml:"uuid"`
+	Name         string            `json:"name" yaml:"name"`
+	ExternalIDs  map[string]string `json:"external_ids" yaml:"external_ids"`
+	Ports        []string          `json:"ports" yaml:"ports"`
+	StaticRoutes []string          `json:"static_routes" yaml:"static_routes"`
+	NAT          []string          `json:"nat" yaml:"nat"`
+	LoadBalancer []string          `json:"load_balancer" yaml:"load_balancer"`
+	Policies     []string          `json:"policies" yaml:"policies"`
 }
 
 // GetLogicalRouters returns a list of OVN logical routers from the Northbound database
