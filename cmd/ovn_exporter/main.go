@@ -1,8 +1,12 @@
 package main
 
 import (
+	"errors"
+	"fmt"
 	"net/http"
 	"os"
+	"path/filepath"
+	"strings"
 
 	ovn "github.com/Liquescent-Development/ovn_exporter/pkg/ovn_exporter"
 	kingpin "github.com/alecthomas/kingpin/v2"
@@ -16,6 +20,30 @@ import (
 )
 
 var version string
+
+func verifySocket(socketPath string, pidFile string) string {
+	if _, err := os.Stat(socketPath); err == nil {
+		return socketPath
+	}
+
+	if _, err := os.Stat(pidFile); errors.Is(err, os.ErrNotExist) {
+		panic(err)
+	}
+
+	pidBytes, err := os.ReadFile(pidFile)
+	if err != nil {
+		panic(err)
+	}
+
+	pid := strings.TrimSpace(string(pidBytes))
+	ext := filepath.Ext(socketPath)
+	if ext != "" {
+		basePath := strings.TrimSuffix(socketPath, ext)
+		return fmt.Sprintf("%s.%s%s", basePath, pid, ext)
+	}
+
+	return fmt.Sprintf("%s.%s", socketPath, pid)
+}
 
 func main() {
 
@@ -98,7 +126,7 @@ func main() {
 
 	exporter.Client.Service.Northd.File.Log.Path = *serviceNorthdFileLogPath
 	exporter.Client.Service.Northd.File.Pid.Path = *serviceNorthdFilePidPath
-	exporter.Client.Service.Northd.Socket.Control = *serviceNorthdSocketControl
+	exporter.Client.Service.Northd.Socket.Control = verifySocket(*serviceNorthdSocketControl, *serviceNorthdFilePidPath)
 
 	exporter, err = ovn.ExporterPerformClientCalls(exporter)
 	if err != nil {
